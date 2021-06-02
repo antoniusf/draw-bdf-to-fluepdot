@@ -4,6 +4,7 @@ import math
 import requests
 import argparse
 
+
 @dataclass
 class Glyph:
     advance: int
@@ -12,8 +13,8 @@ class Glyph:
     offsy: int
     bitmap: list[int]
 
-class FB:
 
+class FB:
     def __init__(self, width, height):
 
         self.width = width
@@ -33,7 +34,11 @@ class FB:
         return "".join(self.fb)
 
 
-charpattern = re.compile("STARTCHAR [^\n]+\nENCODING (?P<encoding>[0-9]+)\n.*?DWIDTH (?P<dwidth>[ 0-9]+)\n.*?BBX (?P<bbx>[ 0-9-]+)\n.*?BITMAP\n(?P<bitmap>([0-9A-F]+\n)+)ENDCHAR", re.DOTALL)
+charpattern = re.compile(
+    "STARTCHAR [^\n]+\nENCODING (?P<encoding>[0-9]+)\n.*?DWIDTH (?P<dwidth>[ 0-9]+)\n.*?BBX (?P<bbx>[ 0-9-]+)\n.*?BITMAP\n(?P<bitmap>([0-9A-F]+\n)+)ENDCHAR",
+    re.DOTALL,
+)
+
 
 def parse_bdf(fname):
 
@@ -43,9 +48,9 @@ def parse_bdf(fname):
     glyphs = {}
 
     for charmatch in charpattern.finditer(contents):
-        #print(charmatch.group(0))
-        #print(charmatch.group("bbx"))
-        #print()
+        # print(charmatch.group(0))
+        # print(charmatch.group("bbx"))
+        # print()
 
         encoding = int(charmatch.group("encoding"))
         advance = int(charmatch.group("dwidth").split(" ")[0])
@@ -55,21 +60,28 @@ def parse_bdf(fname):
         bitmap = [int(v, 16) for v in charmatch.group("bitmap").split("\n") if v != ""]
 
         glyph = Glyph(
-                advance=advance,
-                encoding=encoding,
-                offsx=offsx,
-                offsy=offsy,
-                bitmap=bitmap
-                )
+            advance=advance, encoding=encoding, offsx=offsx, offsy=offsy, bitmap=bitmap
+        )
 
         glyphs[glyph.encoding] = glyph
 
     return glyphs
 
+
+def get_text_width(glyphs, text):
+
+    width = 0
+    for letter in text:
+        if (glyph := glyphs.get(ord(letter))) :
+            width += glyph.advance
+
+    return width
+
+
 def draw_text(glyphs, fb, x, y, text):
 
     for letter in text:
-        if (glyph := glyphs.get(ord(letter))):
+        if (glyph := glyphs.get(ord(letter))) :
 
             for y_index in range(len(glyph.bitmap)):
                 draw_y = (len(glyph.bitmap) - 1) - y_index + glyph.offsy
@@ -91,11 +103,32 @@ argparser.add_argument("font_file", type=str, help="bdf font file")
 argparser.add_argument("text", type=str, help="text to draw")
 argparser.add_argument("-x", type=int, help="x position for drawing text", default=0)
 argparser.add_argument("-y", type=int, help="y position for drawing text", default=0)
+argparser.add_argument(
+    "--anchor-x",
+    choices=["left", "right", "center"],
+    default="left",
+    help="set the horizontal anchor point (-x is taken as an offset to this)",
+)
 
 args = argparser.parse_args()
 
 glyphs = parse_bdf(args.font_file)
 
 fb = FB(115, 16)
+
+if args.anchor_x == "center":
+    text_width = get_text_width(glyphs, args.text)
+    free_space = fb.width - text_width
+    # this rounds down, meaning that the text will tend to go left instead
+    # of right if it can't be centered exactly
+    left_pad = free_space // 2
+    args.x += left_pad
+
+elif args.anchor_x == "right":
+    text_width = get_text_width(glyphs, args.text)
+    free_space = fb.width - text_width
+    left_pad = free_space
+    args.x += left_pad
+
 draw_text(glyphs, fb, args.x, args.y, args.text)
 requests.post(f"http://{args.host}/framebuffer", data=str(fb).encode("ascii"))
