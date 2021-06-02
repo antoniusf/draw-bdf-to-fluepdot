@@ -40,6 +40,8 @@ charpattern = re.compile(
 )
 
 
+sizepattern = re.compile("SIZE (?P<size>[0-9]+) [0-9]+ [0-9]+\n")
+
 def parse_bdf(fname):
 
     with open(fname) as f:
@@ -65,7 +67,9 @@ def parse_bdf(fname):
 
         glyphs[glyph.encoding] = glyph
 
-    return glyphs
+    font_size = int(sizepattern.search(contents).group("size"))
+
+    return font_size, glyphs
 
 
 def get_text_width(glyphs, text):
@@ -78,9 +82,16 @@ def get_text_width(glyphs, text):
     return width
 
 
-def draw_text(glyphs, fb, x, y, text):
+def draw_text(glyphs, fb, x, y, text, line_height):
+
+    start_x = x
 
     for letter in text:
+
+        if letter == "\n":
+            y -= line_height
+            x = start_x
+
         if (glyph := glyphs.get(ord(letter))) :
 
             for y_index in range(len(glyph.bitmap)):
@@ -103,6 +114,7 @@ argparser.add_argument("font_file", type=str, help="bdf font file")
 argparser.add_argument("text", type=str, help="text to draw")
 argparser.add_argument("-x", type=int, help="x position for drawing text", default=0)
 argparser.add_argument("-y", type=int, help="y position for drawing text", default=0)
+argparser.add_argument("--line-height", type=int, help="line height in percent of the font size", default=120)
 argparser.add_argument(
     "--anchor-x",
     choices=["left", "right", "center"],
@@ -112,7 +124,7 @@ argparser.add_argument(
 
 args = argparser.parse_args()
 
-glyphs = parse_bdf(args.font_file)
+font_size, glyphs = parse_bdf(args.font_file)
 
 fb = FB(115, 16)
 
@@ -130,5 +142,5 @@ elif args.anchor_x == "right":
     left_pad = free_space
     args.x += left_pad
 
-draw_text(glyphs, fb, args.x, args.y, args.text)
+draw_text(glyphs, fb, args.x, args.y, args.text, line_height=round(args.line_height / 100 * font_size))
 requests.post(f"http://{args.host}/framebuffer", data=str(fb).encode("ascii"))
