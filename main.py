@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import re
 import math
 import requests
+import argparse
 
 @dataclass
 class Glyph:
@@ -83,8 +84,18 @@ def draw_text(glyphs, fb, x, y, text):
 
             x += glyph.advance
 
-glyphs = parse_bdf("gerhard-12.bdf")
+
+argparser = argparse.ArgumentParser(description="render bdf fonts to fluepdot")
+argparser.add_argument("host", type=str, help="hostname or ip address of the fluepdot")
+argparser.add_argument("font_file", type=str, help="bdf font file")
+argparser.add_argument("text", type=str, help="text to draw")
+argparser.add_argument("-x", type=int, help="x position for drawing text", default=0)
+argparser.add_argument("-y", type=int, help="y position for drawing text", default=0)
+
+args = argparser.parse_args()
+
+glyphs = parse_bdf(args.font_file)
 
 fb = FB(115, 16)
-draw_text(glyphs, fb, 10, 3, "2021-06-02 Wed.")
-requests.post("http://<put-fluepdot-ip-here>/framebuffer", data=str(fb).encode("ascii"))
+draw_text(glyphs, fb, args.x, args.y, args.text)
+requests.post(f"http://{args.host}/framebuffer", data=str(fb).encode("ascii"))
