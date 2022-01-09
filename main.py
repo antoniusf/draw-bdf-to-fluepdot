@@ -42,6 +42,34 @@ charpattern = re.compile(
 
 sizepattern = re.compile("SIZE (?P<size>[0-9]+) [0-9]+ [0-9]+\n")
 
+def symbol_iterator(characters):
+
+    previous_was_backslash = False
+
+    for character in characters:
+
+        if previous_was_backslash:
+            if character == "n":
+                yield "\n"
+
+            elif character == "\\":
+                yield "\\"
+
+            elif character == "h":
+                yield "hfill"
+
+            else:
+                yield character
+
+            previous_was_backslash = False
+
+        elif character == "\\":
+            previous_was_backslash = True
+
+        else:
+            yield character
+
+
 def parse_bdf(fname):
 
     with open(fname) as f:
@@ -75,18 +103,29 @@ def parse_bdf(fname):
 def get_text_width(glyphs, text):
 
     width = 0
-    for letter in text:
+    for symbol in symbol_iterator(text):
+        if symbol == "hfill":
+            continue
+
+        letter = symbol
+
         if (glyph := glyphs.get(ord(letter))) :
             width += glyph.advance
 
     return width
 
 
-def draw_text(glyphs, fb, x, y, text, line_height):
+def draw_text(glyphs, fb, x, y, text, line_height, space_per_hfill):
 
     start_x = x
 
-    for letter in text:
+    for symbol in symbol_iterator(text):
+
+        if symbol == "hfill":
+            x += space_per_hfill
+            continue
+
+        letter = symbol
 
         if letter == "\n":
             y -= line_height
@@ -103,7 +142,7 @@ def draw_text(glyphs, fb, x, y, text, line_height):
                     draw_x = (padded_width - 1) - x_index + glyph.offsx
 
                     if bitmap_row & (1 << x_index):
-                        fb.set(draw_x + x, draw_y + y)
+                        fb.set(draw_x + int(x), draw_y + y)
 
             x += glyph.advance
 
@@ -112,35 +151,31 @@ argparser = argparse.ArgumentParser(description="render bdf fonts to fluepdot")
 argparser.add_argument("host", type=str, help="hostname or ip address of the fluepdot")
 argparser.add_argument("font_file", type=str, help="bdf font file")
 argparser.add_argument("text", type=str, help="text to draw")
-argparser.add_argument("-x", type=int, help="x position for drawing text", default=0)
 argparser.add_argument("-y", type=int, help="y position for drawing text", default=0)
 argparser.add_argument("--line-height", type=int, help="line height in percent of the font size", default=120)
-argparser.add_argument(
-    "--anchor-x",
-    choices=["left", "right", "center"],
-    default="left",
-    help="set the horizontal anchor point (-x is taken as an offset to this)",
-)
+argparser.add_argument("--margin-left", type=int, help="distance from text to left edge of the display", default=0)
+argparser.add_argument("--margin-right", type=int, help="dinstance from text to right edge of the display", default=0)
 
 args = argparser.parse_args()
+
+print(str(args.text))
 
 font_size, glyphs = parse_bdf(args.font_file)
 
 fb = FB(115, 16)
 
-if args.anchor_x == "center":
-    text_width = get_text_width(glyphs, args.text)
-    free_space = fb.width - text_width
-    # this rounds down, meaning that the text will tend to go left instead
-    # of right if it can't be centered exactly
-    left_pad = free_space // 2
-    args.x += left_pad
+number_of_hfills = sum(1 if symbol == "hfill" else 0 for symbol in symbol_iterator(args.text))
+print(number_of_hfills)
 
-elif args.anchor_x == "right":
+if number_of_hfills > 0:
     text_width = get_text_width(glyphs, args.text)
-    free_space = fb.width - text_width
-    left_pad = free_space
-    args.x += left_pad
+    free_space = fb.width - text_width - args.margin_left - args.margin_right
+    space_per_hfill = free_space / number_of_hfills
+    print(space_per_hfill)
 
-draw_text(glyphs, fb, args.x, args.y, args.text, line_height=round(args.line_height / 100 * font_size))
-requests.post(f"http://{args.host}/framebuffer", data=str(fb).encode("ascii"))
+else:
+    space_per_hfill = None
+
+draw_text(glyphs, fb, args.margin_left, args.y, args.text, line_height=round(args.line_height / 100 * font_size), space_per_hfill=space_per_hfill)
+print(str(fb))
+#requests.post(f"http://{args.host}/framebuffer", data=str(fb).encode("ascii"))
