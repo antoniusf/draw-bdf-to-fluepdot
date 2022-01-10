@@ -69,6 +69,13 @@ def symbol_iterator(characters):
         else:
             yield character
 
+def pixel_iterator(numbers):
+
+    pos = 0
+    while pos < len(numbers):
+        yield (numbers[pos], numbers[pos + 1])
+        pos += 2
+
 
 def parse_bdf(fname):
 
@@ -146,6 +153,20 @@ def draw_text(glyphs, fb, x, y, text, line_height, space_per_hfill):
 
             x += glyph.advance
 
+def parse_point_list(string):
+
+    if string == "":
+        return []
+
+    if not re.fullmatch(r"[0-9]+( [0-9]+)*", string):
+        raise ValueError("Invalid string format")
+
+    numbers = string.split(" ")
+    if len(numbers) % 2 != 0:
+        raise ValueError("Uneven number of values, they must always be given in x-y-pairs")
+
+    return [int(number) for number in numbers]
+
 
 argparser = argparse.ArgumentParser(description="render bdf fonts to fluepdot")
 argparser.add_argument("host", type=str, help="hostname or ip address of the fluepdot")
@@ -155,6 +176,7 @@ argparser.add_argument("-y", type=int, help="y position for drawing text", defau
 argparser.add_argument("--line-height", type=int, help="line height in percent of the font size", default=120)
 argparser.add_argument("--margin-left", type=int, help="distance from text to left edge of the display", default=0)
 argparser.add_argument("--margin-right", type=int, help="dinstance from text to right edge of the display", default=0)
+argparser.add_argument("--set-pixels", type=parse_point_list, help="individual pixels to set, string of numbers separated by one space each, like so: x1 y1 x2 y2 x3 y3 ...", default="")
 
 args = argparser.parse_args()
 
@@ -177,5 +199,10 @@ else:
     space_per_hfill = None
 
 draw_text(glyphs, fb, args.margin_left, args.y, args.text, line_height=round(args.line_height / 100 * font_size), space_per_hfill=space_per_hfill)
+
+for pixel in pixel_iterator(args.set_pixels):
+
+    fb.set(pixel[0], pixel[1])
+
 print(str(fb))
-#requests.post(f"http://{args.host}/framebuffer", data=str(fb).encode("ascii"))
+requests.post(f"http://{args.host}/framebuffer", data=str(fb).encode("ascii"))
