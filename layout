@@ -1,0 +1,25 @@
+columns:
+  1 1 15 1 1 1 1 15 1 1 1 1 15 1 1 1 1 15 1 fill 1 2 14 2
+
+rows:
+  1 1 5 1 1 5 1 1
+  5 2 9
+
+elements:
+  fill-text RILEY-5 center 2 3 2 3 TUE
+  fill-rect 1 4 4 7
+  unfill-text RILEY-5 left 2 3 5 6 EB
+  fill-rect 5 10 0 8
+  unfill-rect 6 9 1 7
+  fill-text RILEY-5 center 7 8 2 3 WED
+  fill-rect 6 9 4 7
+  unfill-text RILEY-5 left 7 8 5 6 EBDP
+  fill-text RILEY-5 center 12 13 2 3 THU
+  fill-rect 11 14 4 7
+  fill-text RILEY-5 center 17 18 2 3 FRI
+  fill-rect 16 19 4 7
+  fill-rect 20 21 0 8
+  fill-text RILEY-5 center 22 23 9 10 JAN
+  fill-text gerhard-12 center 22 23 11 12 30
+
+end
