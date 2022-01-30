@@ -3,6 +3,7 @@ import re
 import math
 import requests
 import argparse
+import os.path
 
 class ParseError(RuntimeError):
     pass
@@ -23,6 +24,10 @@ class Glyph:
 
 @dataclass
 class Font:
+    # we're not parsing this from the bdf file (i'm not sure which attribute to take),
+    # this is literally just the filename minus the ending
+    font_name: str
+
     font_size: int
     glyphs: list[Glyph]
 
@@ -183,11 +188,16 @@ argparser.add_argument("--font_file", type=str, action="append", help="bdf font 
 
 args = argparser.parse_args()
 
-fonts = []
+fonts = {}
 
-for filename in args.font_file:
-    font_size, glyphs = parse_bdf(filename)
-    fonts.append(Font(font_size, glyphs))
+if args.font_file:
+    for filename in args.font_file:
+        font_size, glyphs = parse_bdf(filename)
+
+        basename = os.path.basename(filename)
+        font_name = basename[:-4] if basename.endswith(".bdf") else basename
+
+        fonts[font_name] = Font(font_name, font_size, glyphs)
 
 def parse_row_or_column(line):
 
@@ -233,7 +243,7 @@ def handle_element(line, grid, fb, fonts):
     op, line = line.split(maxsplit=1)
 
     if op == "fill-text" or op == "unfill-text":
-        align, left, right, top, bottom, text = line.split(maxsplit=5)
+        font_name, align, left, right, top, bottom, text = line.split(maxsplit=6)
         left = grid.column_offsets[int(left)]
         right = grid.column_offsets[int(right)]
         top = grid.row_offsets[int(top)]
@@ -241,7 +251,7 @@ def handle_element(line, grid, fb, fonts):
         # where the next element already begins. hence the -1
         bottom = grid.row_offsets[int(bottom)] - 1
 
-        text_size = get_text_width(fonts[0].glyphs, text)
+        text_size = get_text_width(fonts[font_name].glyphs, text)
         space = right - left - text_size
 
         if align == "left":
@@ -255,7 +265,7 @@ def handle_element(line, grid, fb, fonts):
 
         print(left, right, space, bottom)
 
-        draw_text(fonts[0].glyphs, fb, left, bottom, text, fill=op.startswith("fill"))
+        draw_text(fonts[font_name].glyphs, fb, left, bottom, text, fill=op.startswith("fill"))
 
     elif op == "fill-rect" or op == "unfill-rect":
         left, right, top, bottom = line.split()
