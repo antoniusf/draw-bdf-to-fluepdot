@@ -144,28 +144,93 @@ def get_text_width(glyphs, text):
     return width
 
 
-def draw_text(glyphs, fb, x, y, text, fill=True):
+class Context(object):
+    """A drawing context."""
 
-    start_x = x
+    def __init__(self, font_files):
 
-    for symbol in symbol_iterator(text):
+        self.fb = FB(115, 16)
 
-        letter = symbol
+        self.fonts = {}
 
-        if (glyph := glyphs.get(ord(letter))) :
+        for filename in font_files:
+            font_size, glyphs = parse_bdf(filename)
 
-            for y_index in range(len(glyph.bitmap)):
-                draw_y = - (len(glyph.bitmap) - 1) + y_index - glyph.offsy
-                bitmap_row = glyph.bitmap[y_index]
+            basename = os.path.basename(filename)
+            font_name = basename[:-4] if basename.endswith(".bdf") else basename
 
-                padded_width = math.ceil(bitmap_row.bit_length() / 8) * 8
-                for x_index in range(padded_width):
-                    draw_x = (padded_width - 1) - x_index + glyph.offsx
+            self.fonts[font_name] = Font(font_name, font_size, glyphs)
 
-                    if bitmap_row & (1 << x_index):
-                        fb.set(draw_x + int(x), draw_y + y, fill)
+        self.grid = Grid([], [])
 
-            x += glyph.advance
+    def add_grid_column(self, column_spec):
+        self.grid.column_offsets.extend(cumsum(compute_fill_size(column_spec, fb.width)))
+
+    def add_grid_row(self, row_spec):
+        self.grid.row_offsets.extend(cumsum(compute_fill_size(row_spec, fb.height)))
+
+
+    def draw_text(font_name, align, left, right, top, bottom, text, fill=True): #glyphs, fb, x, y, text, fill=True):
+
+        font = self.fonts.get(font_name)
+
+        glyphs = font.glyphs
+
+        left = grid.column_offsets[left]
+        right = grid.column_offsets[right]
+        top = grid.row_offsets[top]
+        bottom = grid.row_offsets[bottom]
+
+        # note: bottom and right are exclusive values, meaning
+        # they are the coordinates of the first pixels that
+        # aren't part of the draw area anymore. for right,
+        # this isn't noticeable -- (right - left) is still the
+        # total amount of space available, and we'll start drawing
+        # from the left anyways. for bottom though, we'll actually
+        # set the lowest pixels, so we have to compensate and add one.
+        # (see below)
+
+        text_size = get_text_width(fonts[font_name].glyphs, text)
+        space = right - left - text_size
+
+        if align == "left":
+            left = left
+
+        elif align == "center":
+            left = left + space//2
+
+        elif align == "right":
+            left = left + space
+
+        x = left
+
+        for symbol in symbol_iterator(text):
+
+            letter = symbol
+
+            if (glyph := glyphs.get(ord(letter))) :
+
+                for y_index in range(len(glyph.bitmap)):
+                    draw_y = - (len(glyph.bitmap) - 1) + y_index - glyph.offsy
+                    bitmap_row = glyph.bitmap[y_index]
+
+                    padded_width = math.ceil(bitmap_row.bit_length() / 8) * 8
+                    for x_index in range(padded_width):
+                        draw_x = (padded_width - 1) - x_index + glyph.offsx
+
+                        if bitmap_row & (1 << x_index):
+                            # see note above on why it's (bottom + 1)
+                            fb.set(draw_x + int(x), draw_y + bottom + 1, fill)
+
+                x += glyph.advance
+
+
+    def draw_rect(left, right, top, bottom, fill=True):
+
+        for x in range(grid.column_offsets[left], grid.column_offsets[right]):
+            for y in range(grid.row_offsets[top], grid.row_offsets[bottom]):
+                fb.set(x, y, fill=fill)
+
 
 def parse_point_list(string):
 
@@ -188,16 +253,7 @@ argparser.add_argument("--font_file", type=str, action="append", help="bdf font 
 
 args = argparser.parse_args()
 
-fonts = {}
-
-if args.font_file:
-    for filename in args.font_file:
-        font_size, glyphs = parse_bdf(filename)
-
-        basename = os.path.basename(filename)
-        font_name = basename[:-4] if basename.endswith(".bdf") else basename
-
-        fonts[font_name] = Font(font_name, font_size, glyphs)
+context = Context(font_files=(args.font_file or []))
 
 def parse_row_or_column(line):
 
@@ -238,41 +294,18 @@ def cumsum(numbers):
 
     return result
 
+
 def handle_element(line, grid, fb, fonts):
 
     op, line = line.split(maxsplit=1)
 
     if op == "fill-text" or op == "unfill-text":
         font_name, align, left, right, top, bottom, text = line.split(maxsplit=6)
-        left = grid.column_offsets[int(left)]
-        right = grid.column_offsets[int(right)]
-        top = grid.row_offsets[int(top)]
-        # bottom is *exclusive* the value from the grid, since that's
-        # where the next element already begins. hence the -1
-        bottom = grid.row_offsets[int(bottom)] - 1
-
-        text_size = get_text_width(fonts[font_name].glyphs, text)
-        space = right - left - text_size
-
-        if align == "left":
-            left = left
-
-        elif align == "center":
-            left = left + space//2
-
-        elif align == "right":
-            left = left + space
-
-        print(left, right, space, bottom)
-
-        draw_text(fonts[font_name].glyphs, fb, left, bottom, text, fill=op.startswith("fill"))
+        draw_text(font_name, align, int(left), int(right), int(top), int(bottom), text, fill=op.startswith("fill"))
 
     elif op == "fill-rect" or op == "unfill-rect":
         left, right, top, bottom = line.split()
-
-        for x in range(grid.column_offsets[int(left)], grid.column_offsets[int(right)]):
-            for y in range(grid.row_offsets[int(top)], grid.row_offsets[int(bottom)]):
-                fb.set(x, y, fill=op.startswith("fill"))
+        draw_rect(int(left), int(right), int(top), int(bottom), fill=op.startswith("fill"))
 
 
 # read input
@@ -280,7 +313,6 @@ modes = ["expect column header", "columns", "rows", "elements"]
 mode = modes[0]
 
 grid = Grid([], [])
-fb = FB(115, 16)
 
 while True:
     line = input()
@@ -320,9 +352,6 @@ while True:
             break
         else:
             raise ParseError("Expected either an element definition (line starting with two spaces), or an end token like so: 'end', without any whitespace")
-
-        print(str(fb))
-
 
 
 #draw_text(glyphs, fb, args.margin_left, args.y, args.text, line_height=round(args.line_height / 100 * font_size), space_per_hfill=space_per_hfill)
