@@ -21,6 +21,9 @@ class Font:
 
     def get_text_width(self, text):
 
+        if len(text) == 0:
+            return 0
+
         width = 0
         for letter in text[:-1]:
             if (glyph := self.glyphs.get(ord(letter))) :
@@ -28,7 +31,7 @@ class Font:
 
         # last letter gets special treatment, we don't want to 
         # add the space past the last letter
-        if (glyph := self.glyphs.get(ord(letter))):
+        if (glyph := self.glyphs.get(ord(text[-1]))):
             width += glyph.width + glyph.offsx
 
         return width
