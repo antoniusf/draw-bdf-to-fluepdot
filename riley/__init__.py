@@ -118,10 +118,9 @@ charpattern = re.compile(
 sizepattern = re.compile("SIZE (?P<size>[0-9]+) [0-9]+ [0-9]+\n")
 
 
-def parse_bdf(fname):
+def parse_bdf(file_handle):
 
-    with open(fname) as f:
-        contents = f.read()
+    contents = file_handle.read()
 
     glyphs = {}
 
@@ -152,7 +151,9 @@ if __name__ == "__main__":
 
     fb = FB(115, 16)
 
-    riley_5 = parse_bdf("/home/antonius/RILEY-5.bdf")
+    with open("/home/antonius/RILEY-5.bdf") as filehandle:
+        riley_5 = parse_bdf(filehandle)
+
     fb.draw_text(riley_5, "center", 2, 17, 2, 7, "SUN")
     fb.draw_rect(1, 18, 8, 15)
     fb.draw_text(riley_5, "left", 2, 17, 9, 14, "EB", fill=False)
